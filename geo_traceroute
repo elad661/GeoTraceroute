@@ -1,0 +1,104 @@
+#! /bin/env python3
+# coding=utf8
+#
+# geo_traceroute - A web app for showing traceroute output on a map
+#
+#╔════════════════════════════════════════════════════════════════════════════╗
+#║ Copyright © 2014, Elad Alfassa <elad@fedoraproject.org>                    ║
+#║                                                                            ║
+#║   This program is free software: you can redistribute it and/or modify     ║
+#║   it under the terms of the GNU General Public License as published by     ║
+#║   the Free Software Foundation, either version 3 of the License, or        ║
+#║   (at your option) any later version.                                      ║
+#║                                                                            ║
+#║   This program is distributed in the hope that it will be useful,          ║
+#║   but WITHOUT ANY WARRANTY; without even the implied warranty of           ║
+#║   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the            ║
+#║   GNU General Public License for more details.                             ║
+#║                                                                            ║
+#║   You should have received a copy of the GNU General Public License        ║
+#║   along with this program.  If not, see <http://www.gnu.org/licenses/>.    ║
+#║                                                                            ║
+#╚════════════════════════════════════════════════════════════════════════════╝
+from __future__ import print_function
+import cherrypy
+from cherrypy.process.plugins import Daemonizer
+from cherrypy.process.plugins import PIDFile
+import os
+import os.path
+import re
+import argparse
+import socket
+import pygeoip
+import json
+app_location = os.path.dirname(os.path.abspath(__file__))
+
+class GeoLocate():
+    def __init__(self, geoip_path='/usr/share/GeoIP/GeoLiteCity.dat'):
+        ip_regex = r"\((\b(?:(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.){3}(?:25[0-5]|2[0-4]\d|[01]?\d\d?))\b\)"
+        self.ip_re = re.compile(ip_regex)
+        self.gi_city = pygeoip.GeoIP(geoip_path)
+
+    def hop_info_linux(self, hop):
+        if hop == '':
+            return {'geoip': False}
+        split_hop = hop.split()
+        try:
+            ip = self.ip_re.search(hop).group()
+        except AttributeError:
+            print(split_hop)
+            ip = split_hop[2]
+        ip = ip.strip('(').strip(')')
+        hop_info_dict = {'hop_num': split_hop[0], 'hop_ip': ip}
+        if ip != '*':
+            hop_info_dict['fqdn'] = socket.getfqdn(ip)
+            hop_info_dict['geoip'] = self.gi_city.record_by_name(ip)
+            if len(hop_info_dict['geoip']) == 0:
+                hop_info_dict['geoip'] = False
+            print(hop_info_dict['geoip'])
+        else:
+            hop_info_dict['geoip'] = False
+        return hop_info_dict
+
+    @cherrypy.expose()
+    def locate(self, traceroute_output=None, traceroute_format='linux'):
+        location_list = []
+        traceroute_output = traceroute_output.strip()
+        if traceroute_format == 'linux':
+            actual_destination = ''
+            for hop in traceroute_output.splitlines():
+                if hop.startswith('traceroute to '):
+                    actual_destination = hop
+                    continue
+                hop_info_dict = self.hop_info_linux(hop)
+                location_list.append(hop_info_dict)
+            actual_destination = actual_destination.replace('traceroute to ', 'dest ')
+            location_list.append(self.hop_info_linux(actual_destination))
+        return json.dumps(location_list)
+
+    @cherrypy.expose()
+    def index(self):
+        return cherrypy.lib.static.serve_file(os.path.join(app_location, 'index.html'))
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(description='Get basic information about a server\'s SSL/TLS certificate')
+    parser.add_argument('--port', '-p', nargs='?', default=8080, help='Specify port number to listen on (default is 8080')
+    parser.add_argument('-d', '--deamonize', action='store_true', help='Run as a deamon')
+    args = parser.parse_args()
+
+    if args.port is not None and int(args.port) > 65535 or int(args.port) < 0:
+        print("Invalid port number %s!" % args.port)
+        return 3
+    elif args.port is not None:
+        cherrypy.config.update({'server.socket_port': int(args.port)})
+    if (args.deamonize):
+        logfile = os.path.join(os.getcwd(), 'geo_traceroute.log')
+        pid = PIDFile(cherrypy.engine, os.path.join(os.getcwd(), 'geo_traceroute.pid'))
+        pid.subscribe()
+        d = Daemonizer(cherrypy.engine, stdout=logfile, stderr=logfile)
+        d.subscribe()
+    cherrypy.quickstart(GeoLocate())
+
+if __name__ == '__main__':
+    main()
