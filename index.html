@@ -144,9 +144,8 @@
             }
             $(document).ready(function(e) {
                 map = L.map('map_canvas').setView([0, 0], 1);
-                L.tileLayer('http://{s}.mqcdn.com/tiles/1.0.0/map/{z}/{x}/{y}.png', {
-                    attribution: 'Tiles Courtesy of <a href="http://www.mapquest.com/" target="_blank">MapQuest</a> <img src="http://developer.mapquest.com/content/osm/mq_logo.png">, map data &copy; <a href="http://osm.org/copyright">OpenStreetMap</a> contributors',
-                    subdomains: ['otile1', 'otile2', 'otile3', 'otile4']
+                L.tileLayer('http://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    attribution: '&copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a>'
                 }).addTo(map);
                 $('#btn').attr('disabled', false);
             })
@@ -154,11 +153,11 @@
     </head>
     <body>
         <header>
-            <h1>GeoTraceroute: puts traceroute on the map!</h1>
+            <h1>GeoTraceroute</h1>
         </header>
         <main>
             <form>
-                <textarea id="q"></textarea>
+                <textarea placeholder="Paste output from tracerotue here" id="q"></textarea>
                 <input id="btn" type="button" value="Map it" onclick="doit()">
                 <span class="loading"><i class="icon-spin icon-spinner icon-large"></i> Working...</span>
             </form>
